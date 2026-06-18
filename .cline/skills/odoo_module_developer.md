@@ -1,110 +1,116 @@
-# Skill: Backend Module Structuring and OCA Standards for Odoo
+# Skill: OCA Odoo Module Architecture, Scaffolding, & Standards
 
-This Skill empowers the Cline agent with physical layer design protocols, strict naming conventions from the Odoo Community Association (OCA), professional scaffolding, and decoupling strategies to minimize friction during major Odoo migrations (v16.0 to v19.0).
-
-## Clean and Concise Code
-
-0. **Clean and Concise Code**:
-   - Do not generate unnecessary comments in the generated code. Code should be self-explanatory.
-   - Prioritize clarity through descriptive variable and function names, not through comments.
-   - Be concise: generate only the essential code needed to solve the task, without redundant explanations.
-   - Comments are only allowed to document complex, non-obvious business logic that cannot be expressed with descriptive names.
-
-## Architecture Strategy: Data and Application (UI) Decoupling
-
-To mitigate recurring failures and operational complexity during major version migrations (e.g., from v17 to v18, or v18 to v19), it is formally recommended to implement a **two-layer physical separation strategy** for moderate to high complexity developments:
-
-1. **Data and Persistence Layer (`mi_modulo_data`)**:
-   - **Content**: Exclusive definition of Python models, field extensions, SQL constraints (`_sql_constraints`), hard backend business logic, physical security files (`ir.model.access.csv` and record rules), and basic parametrization data.
-   - **Exclusion**: Must not contain XML UI views (`form`, `list`, `kanban`), menus, window actions, QWeb reports, dashboards, or front-end resources.
-   - **Migration Advantage**: This layer almost never experiences errors during database update processes (`OpenUpgrade` or official service), allowing SQL schemas to be migrated and validated cleanly and as a priority.
-
-2. **Interface and User Experience Layer (`mi_modulo_app`)**:
-   - **Content**: Declaration of window actions, UI views, general menus, printed reports, HTTP web controllers, and static resources (`JS/SCSS/OWL`). Depends directly on `mi_modulo_data`.
-   - **Migration Advantage**: Since it contains XMLs and XPath interfaces prone to breaking due to structural changes in base Odoo, this layer can be safely uninstalled or disabled before database migration without risking persisted data. Once the database engine is migrated, the development team adapts, fixes, and reinstalls the visual layer in an isolated and controlled manner.
+This Skill equips the Cline agent with directory structure rules, Python stylistic conventions, view/menu declarations, manifest configuration, and migration-safe decoupling protocols following Odoo and **Odoo Community Association (OCA)** best practices.
 
 ---
 
-## Physical Layer Organization and OCA Standards
+## ⚡ Architectural Strategy: Database Contract vs UI Separation
+To minimize critical failures and simplify database updates during major version upgrades (e.g., v17 → v18, or v18 → v19), Odoo best practice recommends **splitting complex features into two distinct addon modules** [638, 647, 651]:
 
-Each addon must maintain a strict physical directory hierarchy to separate responsibilities. Never scatter general menus or static resources across model files.
+1. **Persistent Data Module (`ctieg_feature_data`)**:
+   * **Scope:** Defines Odoo database models, new fields, model inheritances, SQL constraints, Python validation rules, backend business logic, security permissions (`ir.model.access.csv`), and record rules [638, 647, 651].
+   * **Exclusion:** Does NOT contain window actions, menus, XML form/list views, QWeb reports, dashboards, or web controllers [638, 647, 651].
+   * **Migration Benefit:** This module remains extremely stable during migrations because database schema upgrades (`OpenUpgrade`) almost never break due to front-end changes [638, 647, 651].
 
-### Standard Directory Structure
+2. **Presentation UI Module (`ctieg_feature_app`)**:
+   * **Scope:** Declares the navigation hierarchy, window actions, view structures (form, kanban, list, search, pivot, graph), QWeb printed reports, e-commerce templates, and web controllers [638, 647, 651]. Depends directly on `ctieg_feature_data` [638, 647, 651].
+   * **Migration Benefit:** Since XML views and XPath expressions frequently break when Odoo changes parent form structures, this layer can be cleanly uninstalled or disabled before a major database migration [649, 651]. Once the database engine successfully upgrades, the UI module is adapted, tested, and reinstalled independently without risking database data loss [649, 651].
+
+---
+
+## 📁 Strict Directory Structure
+An OCA-compliant Odoo module must follow a clean physical separation of responsibilities [6, 211]:
 ```text
-mi_modulo/
-├── __init__.py
-├── __manifest__.py
-├── data/
-├── demo/
-├── models/
+ctieg_addon/
+├── __init__.py                  # Root package initializer
+├── __manifest__.py              # Addon metadata, dependencies, and file load order
+├── data/                        # Static, non-modifiable records (noupdate="1")
+├── demo/                        # Sample data used strictly for tests and CI/CD
+├── models/                      # Python database model classes (one model per file)
 │   ├── __init__.py
-│   ├── mi_modelo_base.py
-│   └── mi_modelo_extension.py
-├── security/
+│   └── my_model.py
+├── security/                    # Security group definitions and access rights CSV
 │   ├── ir.model.access.csv
-│   └── mi_modelo_security.xml
-├── views/
-│   ├── mi_modelo_base_views.xml
-│   └── mi_modulo_menus.xml
-├── controllers/
-├── static/
-├── tests/
-└── wizard/
+│   └── my_model_security.xml
+├── views/                       # Client web views and templates (no menus)
+│   └── my_model_views.xml
+├── controllers/                 # HTTP/JSON-RPC web controllers
+├── static/                      # Frontend assets (src/js, src/scss, src/xml, img)
+├── tests/                       # Unit tests (tests/test_my_model.py)
+└── wizard/                      # Transient models and their respective views
 ```
 
-### Manifest Naming Rules and Versioning
-- **License**: Use open-source licenses compatible and authorized by the OCA, prioritizing `LGPL-3` or `AGPL-3`.
-- **OCA Semantic Versioning**: The version number must strictly follow the pattern:
-  $$\text{Version: } \{\text{Odoo Major}\} \cdot \{\text{x}\} \cdot \{\text{y}\} \cdot \{\text{z}\}$$
-  *Example*: `18.0.1.0.0` (Module compiled for Odoo 18.0, first stable release version).
-- **depends_if_installed**: Leverage dynamic optional dependencies to inject compatibility with third-party modules only if they coexist in the installed database, avoiding hard cross-dependencies.
+---
+
+## 🐍 Python Coding Conventions & Standards
+* **Imports Order:** Group imports alphabetically in three distinct blocks separated by single empty lines [220]:
+  1. Python standard library imports [220].
+  2. Odoo core framework imports [220].
+  3. Other Odoo addons imports (rare, declared only if mandatory) [220].
+* **Context Propagation:** When calling methods with an altered context, always use the `with_context()` method rather than modifying the environment dictionary directly [224].
+  * *Warning:* Avoid inserting values that could conflict with third-party creations (such as `default_my_field` during broad transactional creations) [224]. Always prefix custom context keys with your module name to isolate side effects [225].
+* **Singular Naming Scheme:** Model names and module directories must be singular [234, 871] (e.g., `ctieg_order` and `ctieg.order`, NOT `ctieg_orders` or `ctieg.orders`).
 
 ---
 
-## XML Guidelines and UI Best Practices (v18.0 and v19.0)
+## 🎨 XML Views, Menus, & XPath Standards
 
-1. **Menu Separation**:
-   Do not embed general menus in model business views. Extract the entire navigation organizational structure to a dedicated file `views/<module>_menus.xml`. This prevents XML inheritance issues and unresolved IDs during the sequential installation process.
+1. **XPath Robustness (Inherited Views):**
+   * **Avoid positional routing:** Never target views using index paths (e.g., `//form/sheet/notebook/page[2]/group/div`) as these change continuously across Odoo versions, breaking your module [404, 649].
+   * **Anchor on stable attributes:** Anchor XPath selections strictly on unique attributes like `name`, `id`, or specific field tags [404, 649].
+     * *Recommended:* `//field[@name='partner_id']` or `//group[@name='metrics_group']` [404].
 
-2. **Safe View Inheritance (Robust XPath)**:
-   When extending standard Odoo views, avoid using positional XPath routes that depend on the physical element hierarchy (`//form/sheet/notebook/page[2]/group/div`). These structures are extremely fragile and break with every Odoo update.
-   - **Best Practices**: Anchor searches on stable attributes (`name`, `id`, or key control fields).
-     *Recommended Example*: `//field[@name="partner_id"]` or `//notebook[@name="main_notebook"]`.
+2. **Clean Menu Placement:**
+   * Do not embed top-level menus or navigation trees inside a specific model's layout view [214].
+   * Separate menu structure definitions into a dedicated file named `views/<module_name>_menus.xml` to avoid cyclic XML loading dependencies [214].
 
-3. **list Version Constraint (v18+)**:
-   Immediately replace the `<tree>` structural tag with `<list>` in any list view or editable subform from Odoo v18.0 onward.
+3. **Structural Tree Tag Obsolescence:**
+   * **Odoo 17:** Remove the `attrs` attribute entirely [13]. Set conditions using inline boolean expressions [13]:
+     `invisible="state != 'draft'" readonly="state == 'done'" required="estimated_hours > 5"` [418, 978].
+   * **Odoo 18 / 19:** The `<tree>` tag is completely deprecated [15, 637]. You must rename the root tag of all list and table views to `<list>` [15, 637]:
+     ```xml
+     <list string="Tasks list">
+         <field name="name"/>
+     </list>
+     ```
 
 ---
 
-## Professional Backend Module Scaffolding (v18.0 / v19.0)
+## ⚙️ Manifest & Community Extras Configuration
+* **Version Format:** Use the official OCA semantic version scheme [6, 975]:
+  `{Odoo_Major}.{x}.{y}.{z}` (e.g., `19.0.1.0.0` for a module targeting Odoo 19) [6, 975].
+* **Conditional Dependencies (`depends_if_installed`)**:
+  Using the `base_manifest_extension` OCA addon, you can declare optional dependencies inside your manifest [22, 465]. This allows your module to integrate with optional third-party modules dynamically *only if* they are already installed, preventing hard installation blocks [466]:
+  ```python
+  "depends_if_installed": {
+      "crm": ["views/crm_extensions.xml"]
+  }
+  ```
 
-Below is the complete structuring of the decoupled sales performance analysis module `sales_performance_optimizer`:
+---
 
-### 1. Manifest File: `__manifest__.py`
+## 📦 Complete Scaffolding: Sales Performance App Template (Odoo 19)
+
+### 1. Manifest: `__manifest__.py`
 ```python
+# -*- coding: utf-8 -*-
 {
-    "name": "Sales Performance Optimizer (OCA Standard)",
-    "summary": "Advanced analytics for sales team goals and performance",
-    "version": "18.0.1.0.0",
+    "name": "CTiEG Sales Performance App",
+    "summary": "Standardized Sales Performance optimizer for agenic development",
+    "version": "19.0.1.0.0",
     "category": "Sales",
-    "author": "NotebookLM OCA Developer",
+    "author": "CTiEG",
+    "website": "https://www.ctieg.com",
     "license": "LGPL-3",
-    "website": "https://odoo-community.org",
     "depends": [
         "sale_management",
         "mail"
     ],
-    "depends_if_installed": {
-        "board": ["views/sales_performance_dashboard.xml"]
-    },
     "data": [
         "security/sales_performance_groups.xml",
         "security/ir.model.access.csv",
         "views/sales_performance_optimizer_views.xml",
         "views/sales_performance_menus.xml"
-    ],
-    "demo": [
-        "demo/sales_performance_demo.xml"
     ],
     "installable": True,
     "application": False,
@@ -112,48 +118,41 @@ Below is the complete structuring of the decoupled sales performance analysis mo
 }
 ```
 
-### 2. Security Groups XML Definition: `security/sales_performance_groups.xml`
+### 2. Groups XML: `security/sales_performance_groups.xml`
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <data noupdate="1">
         <record id="module_category_sales_performance" model="ir.module.category">
             <field name="name">Sales Performance</field>
-            <field name="sequence">20</field>
+            <field name="sequence">25</field>
         </record>
 
         <record id="group_sales_performance_user" model="res.groups">
-            <field name="name">Analysis User</field>
+            <field name="name">Performance Analyst</field>
             <field name="category_id" ref="module_category_sales_performance"/>
             <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
-        </record>
-
-        <record id="group_sales_performance_manager" model="res.groups">
-            <field name="name">Analysis Manager</field>
-            <field name="category_id" ref="module_category_sales_performance"/>
-            <field name="implied_ids" eval="[(4, ref('group_sales_performance_user'))]"/>
-            <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
         </record>
     </data>
 </odoo>
 ```
 
-### 3. Access Control CSV Matrix: `security/ir.model.access.csv`
+### 3. Matriz CSV: `security/ir.model.access.csv`
 ```csv
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_sales_performance_user,sales.performance.user,model_project_task_optimizer,group_sales_performance_user,1,1,1,0
-access_sales_performance_manager,sales.performance.manager,model_project_task_optimizer,group_sales_performance_manager,1,1,1,1
+access_sales_performance_user,sales.performance.user,model_ctieg_task_optimizer,group_sales_performance_user,1,1,1,0
 ```
 
-### 4. Business Views XML Definition (v18+ List Format): `views/sales_performance_optimizer_views.xml`
+### 4. Vistas XML: `views/sales_performance_optimizer_views.xml`
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <record id="project_task_optimizer_view_list" model="ir.ui.view">
-        <field name="name">project.task.optimizer.view.list</field>
-        <field name="model">project.task.optimizer</field>
+    <!-- List view (Mandatory tag <list> in Odoo 18/19) -->
+    <record id="ctieg_task_optimizer_view_list" model="ir.ui.view">
+        <field name="name">ctieg.task.optimizer.view.list</field>
+        <field name="model">ctieg.task.optimizer</field>
         <field name="arch" type="xml">
-            <list string="Task Optimizer" decoration-info="state == 'draft'" decoration-success="state == 'done'">
+            <list string="Optimized Tasks" decoration-info="state == 'draft'" decoration-success="state == 'done'">
                 <field name="sequence" widget="handle"/>
                 <field name="name"/>
                 <field name="partner_id"/>
@@ -164,11 +163,12 @@ access_sales_performance_manager,sales.performance.manager,model_project_task_op
         </field>
     </record>
 
-    <record id="project_task_optimizer_view_form" model="ir.ui.view">
-        <field name="name">project.task.optimizer.view.form</field>
-        <field name="model">project.task.optimizer</field>
+    <!-- Form view displaying inline dynamic attributes instead of obsolete attrs dictionary -->
+    <record id="ctieg_task_optimizer_view_form" model="ir.ui.view">
+        <field name="name">ctieg.task.optimizer.view.form</field>
+        <field name="model">ctieg.task.optimizer</field>
         <field name="arch" type="xml">
-            <form string="Task Optimizer">
+            <form string="Optimizer Form">
                 <header>
                     <button name="action_confirm" string="Confirm" type="object" class="oe_highlight" invisible="state != 'draft'"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,progress,done"/>
@@ -176,15 +176,15 @@ access_sales_performance_manager,sales.performance.manager,model_project_task_op
                 <sheet>
                     <div class="oe_title">
                         <h1>
-                            <field name="name" placeholder="Task title..."/>
+                            <field name="name" placeholder="E.g., Client Optimization Strategy"/>
                         </h1>
                     </div>
                     <group>
-                        <group name="left_details">
+                        <group name="customer_data">
                             <field name="partner_id" readonly="state == 'done'"/>
                             <field name="company_id" readonly="state == 'done'"/>
                         </group>
-                        <group name="right_metrics">
+                        <group name="metrics_data">
                             <field name="estimated_hours" readonly="state == 'done'"/>
                             <field name="discount_rate" readonly="state == 'done'" required="estimated_hours > 10"/>
                             <field name="cost_total"/>
@@ -195,31 +195,28 @@ access_sales_performance_manager,sales.performance.manager,model_project_task_op
         </field>
     </record>
 
-    <record id="project_task_optimizer_action" model="ir.actions.act_window">
-        <field name="name">Performance Analysis</field>
-        <field name="res_model">project.task.optimizer</field>
+    <record id="ctieg_task_optimizer_action" model="ir.actions.act_window">
+        <field name="name">Optimizer Activity</field>
+        <field name="res_model">ctieg.task.optimizer</field>
         <field name="view_mode">list,form</field>
-        <field name="help" type="html">
-            <p class="o_view_nocontent_smiling_face">
-                Create your first sales performance analysis.
-            </p>
-        </field>
     </record>
 </odoo>
 ```
 
-### 5. Isolated Navigation Menu Structure: `views/sales_performance_menus.xml`
+### 5. Menús XML: `views/sales_performance_menus.xml`
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <menuitem id="menu_sales_performance_root"
-              name="Performance Analysis"
-              parent="sale.menu_sale_config"
-              sequence="50"/>
+    <!-- Isolate top-level menus to prevent cyclic dependencies during XML installation -->
+    <menuitem id="menu_sales_performance_root" 
+              name="CTiEG Performance" 
+              parent="sale.menu_sale_config" 
+              sequence="80"/>
 
-    <menuitem id="menu_sales_performance_optimizer"
-              name="Analysis Tasks"
-              parent="menu_sales_performance_root"
-              action="project_task_optimizer_action"
+    <menuitem id="menu_ctieg_task_optimizer" 
+              name="Optimization Actions" 
+              parent="menu_sales_performance_root" 
+              action="ctieg_task_optimizer_action" 
               sequence="10"/>
 </odoo>
+```

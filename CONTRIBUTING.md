@@ -6,7 +6,7 @@ By contributing, you help the AI write cleaner, safer, more efficient Odoo code 
 
 ---
 
-## 📜 Golden Rules for Skills
+##  Golden Rules for Skills
 
 Any new skill or modification to existing ones must comply with the following requirements:
 
@@ -17,7 +17,7 @@ Any new skill or modification to existing ones must comply with the following re
 
 ---
 
-## 📥 Contribution Process
+##  Contribution Process
 
 1. **Fork the Repository**: Create a copy of this repository in your GitHub account.
 2. **Create a Branch**: Name your branch descriptively:
@@ -33,7 +33,7 @@ Any new skill or modification to existing ones must comply with the following re
 
 ---
 
-## 📐 Suggested Structure for New Skills
+##  Suggested Structure for New Skills
 
 Each Skill `.md` file should be structured using the following template:
 ```markdown

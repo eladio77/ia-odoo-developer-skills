@@ -6,19 +6,19 @@ This repository is structured following best practices so that Cline can consume
 
 ---
 
-## 🏆 Authorship and Authority
+## Authorship and Authority
 * **Organization:** **CTiEG** (Center of Technology and Innovation for Global Success)
 * **Contact Email:** [hola@ctieg.com](mailto:hola@ctieg.com)
 * **Website:** [www.ctieg.com](https://www.ctieg.com)
 
 ---
 
-## 🚀 What is a Cline Skill?
+## What is a Cline Skill?
 **Skills** are structured markdown files (`SKILL.md`) that extend the behavior of the Cline extension in VS Code. Instead of including all Odoo knowledge in your usual prompts (which expensively fills your context window), Cline reads and loads these Skills agentically only when the task requires that specific competency.
 
 ---
 
-## 📂 Included Skills
+## Included Skills
 
 The repository provides **3 professional Skills** to enhance your development:
 
@@ -59,7 +59,7 @@ To integrate these skills into your VS Code with Cline:
 
 ---
 
-## 🧪 Remote Test Script (XML-RPC)
+## Remote Test Script (XML-RPC)
 
 The repository includes a robust Python script called `test_odoo_xmlrpc.py` to safely test your first connection following the guidelines of Skill 1.
 
@@ -75,7 +75,7 @@ python3 test_odoo_xmlrpc.py
 
 ---
 
-## 🤝 Contributions and Feedback are Welcome!
+## Contributions and Feedback are Welcome!
 
 This is an open-source project and we would love to receive your contributions!
 If you wish to add new skills (e.g., for OWL views, HTTP REST Controllers, QWeb Reports, etc.) or improve existing ones:
@@ -87,7 +87,7 @@ If you wish to add new skills (e.g., for OWL views, HTTP REST Controllers, QWeb 
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the **MIT License** - see the [LICENSE.txt](LICENSE.txt) file for more details.
 

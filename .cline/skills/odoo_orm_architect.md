@@ -1,163 +1,181 @@
-# Skill: Odoo ORM Architecture & Query Optimization Specialist
-
-This Skill equips the Cline agent with high-level database engineering rules, cache management, and structural migration patterns from Odoo v16.0 to v19.0+.
-
+---
+name: architecting-odoo-orm
+description: |
+  Designs, optimizes, and debugs Odoo backend models and ORM logic for v16.0 to v19.0. Use this skill when the user asks to write computed fields, custom database constraints, execute safe raw SQL, or optimize database queries to avoid the N+1 problem.
+  Do NOT use for writing external RPC client scripts, building frontend JS/OWL widgets, or creating deployment manifests.
+version: 4.0.0
+license: MIT
+allowed-tools:
+  - Read
+  - Write
+metadata:
+  author: CTiEG
+  email: hola@ctieg.com
+  website: www.ctieg.com
 ---
 
-## ⚡ Performance Framework & N+1 Prevention
-Odoo's ORM maps Python models to PostgreSQL. Poor coding patterns lead to critical latency bottlenecks.
-* **Cache & Prefetching:** Odoo leverages automatic record prefetching [540]. When iterating through a recordset (e.g., from a `search()`), Odoo stores all record IDs in a cache [540]. Accessing a field on the first record triggers a single bulk SQL query to fetch values for *all* records in the prefetch set [540, 541].
-* **The Loop Antipatron:** Never call `search()` or `browse()` inside loops [432]. Doing so breaks the prefetching mechanism and triggers $N+1$ SQL queries [431, 432].
-* **Disabling Prefetching:** If you must read individual records and wish to prevent bulk cache population, call `with_prefetch()` on the recordset with a customized prefetch ID set or `False` [954].
-* **Database Agregations:** Do not run mathematical loops (e.g., sum, avg) on Python recordsets [554]. Instead, use the native `_read_group()` method to push aggregation computations down to PostgreSQL using standard SQL aggregators (`SUM`, `AVG`, `COUNT`) [554, 585].
+# Architecting Odoo Odoo ORM
 
----
+## When to use
+* **Computed Fields & Business Logic**: Implementing computed fields (stored or on-the-fly), onchanges, and data validators on Odoo models.
+* **ORM Query Optimization**: Rewriting loop queries, leveraging prefetching, and using `_read_group` to prevent the N+1 query problem.
+* **Transactional Controls**: Managing explicit savepoints (`env.cr.savepoint()`) or handling advanced cache flush and invalidations cleanly.
+* **Safe Raw SQL Execution**: Running optimized SQL queries with Odoo 19's `env.execute_query` or compiling queries safely using the `odoo.tools.SQL` object.
 
-## 🛡 SQL Composition & Safe Execution
-Odoo 19 introduces strict standards for executing custom SQL commands safely without bypassing ORM intelligence.
-* **Do Not Use `cr.execute()` directly:** Standard raw cursor execution is not cache-aware and exposes Odoo to SQL injection [58, 562].
-* **Safe Helper:** Use the Odoo 19 `self.env.execute_query(query: odoo.tools.sql.SQL)` helper [558]. It automatically parses the query metadata, flushes pending database changes for affected fields, executes the SQL, and returns a list of tuples [558].
-* **The SQL Composition Object:** Always wrap queries in the `odoo.tools.SQL` class (introduced in v17) [116, 562]. This class is composable, maps parameters securely, and prevents SQL injection [563]:
-  ```python
-  from odoo.tools import SQL
-  
-  # Composable and safe query definition
-  query = SQL("SELECT name FROM res_partner WHERE country_id = %s", country_id)
-  results = self.env.execute_query(query)
-  ```
-  *Note:* The percent character `%` must always be escaped as `%%` within the `SQL` helper (e.g., `SQL("name LIKE 'a%%'")`) [562].
+## When NOT to use
+* **External Integrations**: Writing scripts using XML-RPC or JSON-RPC to access Odoo remotely.
+* **Theme & UI Layouts**: Creating actions, menus, form views, list views, or reports.
+* **Web Client & Frontend**: Developing OWL JS widgets, controllers, or assets.
 
----
+## Workflow
+1. **Ensure Recordset-Level Design (Avoid N+1)**:
+   * Odoo uses an automatic prefetching mechanism. When iterating over a recordset, Odoo keeps track of the remaining records and fetches the requested field for *all* records in a single query.
+   * **Never** instantiate or browse records individually inside Python loops (e.g., `self.env['model'].browse(id)`), as this breaks prefetching and forces $\mathcal{O}(N)$ database calls.
+   * When modifying fields, write in bulk directly to the recordset (e.g., `records.write({'state': 'draft'})`) rather than calling `.write` on single records within a loop.
+2. **Aggregations in PostgreSQL**:
+   * Do not loop over records in Python to compute averages, sums, or minimums/maximums.
+   * Leverage the native ORM method `_read_group` (which replaces the deprecated `read_group` in Odoo 18+) to run `GROUP BY` aggregates directly in PostgreSQL.
+3. **Execute SQL Safely (Odoo 17 & 19 Standards)**:
+   * **Never** pass unescaped variables or raw strings to `self.env.cr.execute()`, which opens critical SQL injection vulnerabilities.
+   * Use Odoo 17's **`odoo.tools.SQL`** composable wrapper to build safe, injection-proof SQL queries.
+   * For Odoo 19+, use **`self.env.execute_query(SQL)`** as a safer, cache-aware alternative to direct database cursors.
+4. **Cache and Transaction Governance**:
+   * Always pair raw SQL execution (`INSERT`, `UPDATE`, `DELETE`) with proper Odoo cache operations:
+     * Flush pending calculations first using `model.flush_model(fnames)` or `recordset.flush_recordset(fnames)`.
+     * Execute SQL query.
+     * Invalidate modified caches using `model.invalidate_model(fnames)` or `recordset.invalidate_recordset(fnames)`.
+     * Inform dependent calculated fields of changes by calling `recordset.modified(fnames)`.
+   * To prevent database-level crashes during batch loops, isolate operations using savepoints: `with self.env.cr.savepoint():`. Limiting savepoints to fewer than 64 per transaction avoids severe PostgreSQL degradation.
+5. **Acknowledge Odoo 19 Deprecations**:
+   * The namespace `odoo.osv` is fully deprecated.
+   * Directly accessing `record._cr`, `record._context`, and `record._uid` is deprecated. Use `record.env.cr`, `record.env.context`, and `record.env.uid` instead.
+   * The `read_group` method is deprecated for backend use. Implement `_read_group` instead.
+6. **Master Odoo 19 Search Operators**:
+   * Use the **`any!`** operator in search domains to match related records while bypassing access rights validation.
+   * Leverage Odoo 19's native support for dynamic relative dates in XML search views and domains (e.g., `today -7d`, `now +2h`).
 
-## 💾 Caching, Flushing, & Cache Invalidation
-When running low-level SQL writes (`UPDATE`/`DELETE`), the ORM's cache can become desynchronized [567]. Apply strict and specific flushing and invalidation routines [117, 567]:
-* **Specific Flushing:** Avoid calling `env.flush_all()` unless absolutely necessary, as it flushes everything in memory, delaying execution [565]. Instead, use focused flushing APIs:
-  * `self.env['model.name'].flush_model(fnames=None)`: Flushes only pending computations of specific fields of a model to the database [565, 566].
-  * `recordset.flush_recordset(fnames=None)`: Flushes specific fields for specific records [566].
-* **Specific Cache Invalidation:** If you modify database values directly via SQL, invalidate Odoo's cache to prevent stale reads:
-  * `self.env['model.name'].invalidate_model(fnames=None, flush=True)`: Invalidates specific fields of all records of a model in the cache [568].
-  * `recordset.invalidate_recordset(fnames=None, flush=True)`: Invalidates cache for a specific record subset [569].
-* **Recomputation Trigger:** After direct SQL updates, you must notify Odoo which computed fields depend on those changes by calling the `modified()` method:
-  * `recordset.modified(fnames)`: Flags modifications, invalidates the cache, and schedules recomputations of dependent stored fields [571, 572].
+## Examples
 
----
-
-## ⛔ Modern Decorators & v19 API Changes
-Avoid legacy Odoo practices. Enforce compliance with Odoo 19 structures:
-
-* **Deprecated attributes in v19:** Accessing `record._cr`, `record._context`, and `record._uid` is deprecated [111]. Use `record.env.cr`, `record.env.context`, and `record.env.user.id` instead [111, 533].
-* **`read_group` Deprecation:** The classic `read_group` is deprecated [113]. Use `_read_group()` for backend calculations [113, 585].
-* **`@api.private`:** Restricts public Python methods from being exposed via XML-RPC/JSON-RPC, protecting sensitive internal functions from unauthorized remote calls [113, 551].
-* **`@api.model_create_multi`:** Mandatorily decorates any override of `create()`. Accepts a list of dictionaries (`vals_list`) to enable bulk Postgres insertions instead of sequential operations [6, 17, 1010].
-* **`@api.ondelete(at_uninstall=False)`:** Handles delete (`unlink()`) restrictions [897]. Setting `at_uninstall=False` ensures modules can still be cleanly uninstalled without custom restrictions blocking database deletion [549, 550, 897].
-* **`any!` relation operator:** The dynamic date operators and the relationship operators inside search domains are updated:
-  * Use `any!` (e.g., `[('order_line', 'any!', [('product_id', '=', out_of_stock_id)])]`) to execute nested checks while bypassing record rules or access restrictions [588].
-  * Domains natively accept relative date terminology (e.g., `[('date_order', '>=', 'today -7d')]`) [111, 592].
-
----
-
-## 📄 Odoo 19 Optimized Backend Model Reference
-
+### Example 1: Full-Featured, High-Performance Odoo 19 Model
 ```python
 # -*- coding: utf-8 -*-
-# Copyright 2026 CTiEG - hola@ctieg.com - www.ctieg.com
-# License LGPL-3.0 or later (https://www.gnu.org/licenses/lgpl-3.0.html).
-
 from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError
 from odoo.tools import SQL
 
-class TaskOptimizer(models.Model):
-    _name = "ctieg.task.optimizer"
-    _description = "Advanced CTiEG Task Optimizer"
+class ProjectTaskOptimizer(models.Model):
+    _name = "project.task.optimizer"
+    _description = "Advanced Task Optimizer"
     _order = "sequence, id desc"
-    _check_company_auto = True  # Enforces multi-company record safety automatically
+    _check_company_auto = True
 
-    name = fields.Char(string="Task Title", required=True)
+    name = fields.Char(string="Title", required=True)
     sequence = fields.Integer(string="Sequence", default=10)
     state = fields.Selection([
         ('draft', 'Draft'),
         ('progress', 'In Progress'),
-        ('done', 'Done')
-    ], string="State", default='draft', required=True)
+        ('done', 'Completed')
+    ], string="State", default="draft", required=True)
     
-    # Active field activates archive/unarchive routines safely
-    active = fields.Boolean(default=True)
-
     company_id = fields.Many2one(
-        'res.company', string="Company",
+        'res.company', string="Company", 
         default=lambda self: self.env.company, required=True
     )
     
+    # Secure relational field with multi-company auto-checks
     partner_id = fields.Many2one(
-        'res.partner', string="Customer",
-        check_company=True, index="btree"  # Multi-company validation and database indexing
+        'res.partner', string="Client", 
+        check_company=True, index="btree"
     )
     
     estimated_hours = fields.Float(string="Estimated Hours")
     discount_rate = fields.Float(string="Discount Rate", default=0.0)
     
-    # Stored computed fields optimize reads and search filters
+    # Stored computed field optimized for quick retrieval and UI display
     cost_total = fields.Monetary(
-        compute="_compute_cost_total",
-        currency_field="currency_id",
-        store=True
+        compute="_compute_cost_total", 
+        currency_field="currency_id", 
+        store=True,
+        precompute=True
     )
     
     currency_id = fields.Many2one(
         'res.currency', related="company_id.currency_id", store=True
     )
 
-    # 1. Odoo 18/19 display name standard (name_get is extinct)
+    # 1. Modern name display compute (replacing deprecated name_get())
     @api.depends('name', 'state')
     def _compute_display_name(self):
         for record in self:
             state_label = dict(self._fields['state'].selection(self)).get(record.state, '')
             record.display_name = f"[{state_label.upper()}] {record.name}"
 
-    # 2. Optimized calculation with tight dependencies
+    # 2. Optimized stored compute with precise dependencies
     @api.depends('estimated_hours', 'discount_rate')
     def _compute_cost_total(self):
         for record in self:
-            base_rate = 75.0
+            base_rate = 50.0
             net_rate = base_rate * (1.0 - (record.discount_rate / 100.0))
             record.cost_total = record.estimated_hours * net_rate
 
-    # 3. Database constraints checker
+    # 3. Model validation constraints (Only supports simple field paths)
     @api.constrains('estimated_hours', 'discount_rate')
-    def _check_values(self):
+    def _check_task_values(self):
         for record in self:
             if record.estimated_hours <= 0:
-                raise ValidationError(_("Estimated hours must be strictly positive."))
+                raise ValidationError(_("Estimated hours must be a strictly positive value."))
             if not (0.0 <= record.discount_rate <= 100.0):
-                raise ValidationError(_("Discount rate must be comprised between 0% and 100%."))
+                raise ValidationError(_("Discount rate must be between 0% and 100%."))
 
-    # 4. Mandatory Create Multi (Batch Creation)
+    # 4. Multi-record creation optimization (Mandatory decorator)
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
             if not vals.get('name'):
-                vals['name'] = _("New Scheduled Task")
-        return super(TaskOptimizer, self).create(vals_list)
+                vals['name'] = _("Untitled Task")
+        return super(ProjectTaskOptimizer, self).create(vals_list)
 
-    # 5. Delete protection matching OCA standards
+    # 5. Safe validation before deletion
     @api.ondelete(at_uninstall=False)
     def _prevent_done_deletion(self):
         for record in self:
             if record.state == 'done':
-                raise ValidationError(_("You cannot delete completed records."))
+                raise ValidationError(_("You cannot delete a task in 'Completed' state."))
 
-    # 6. Safe private internal routine (not exposed to RPC)
-    @api.private
-    def _recalculate_internal_margins(self):
-        # Specific flushing before running custom SQL composition
-        self.flush_model(['cost_total'])
-        
+    # 6. Advanced SQL query using safe Odoo 19 execute_query
+    def action_bulk_cost_update(self, multiplier):
+        self.ensure_one()
+        # Create a safe composable SQL object with automatic table prefixing
         query = SQL(
-            "SELECT SUM(cost_total) FROM ctieg_task_optimizer WHERE company_id = %s",
-            self.env.company.id
+            "UPDATE %s SET estimated_hours = estimated_hours * %s WHERE id = %s",
+            SQL.identifier(self._table),
+            multiplier,
+            self.id
         )
-        # Safe SQL execution
-        results = self.env.execute_query(query)
-        return results[0][0] if results else 0.0
+        
+        # Flush the estimated_hours field cache before executing database writes
+        self.flush_recordset(['estimated_hours'])
+        
+        # Execute query cleanly
+        self.env.execute_query(query)
+        
+        # Invalidate the cache to force recalculation on next access
+        self.invalidate_recordset(['estimated_hours'])
+        
+        # Alert downstream computed fields of changes
+        self.modified(['estimated_hours'])
 ```
+
+## Output format
+ORM designs produced by this skill must:
+* Be structured as standard, PEP8-compliant Python model classes inheriting from `models.Model`, `models.TransientModel`, or `models.AbstractModel`.
+* Define computed methods as private (beginning with an underscore `_`) and decorate them with `@api.depends(...)`.
+* Avoid standard SQL injection vulnerabilities by compiling queries cleanly using `odoo.tools.SQL`.
+* Minimize database transactions by leveraging batch operations.
+
+## Anti-patterns to avoid
+* **DO NOT** call `self.env.cr.commit()` or `self.env.cr.rollback()` manually unless you explicitly initialized a separate database cursor. Manual commits bypass test rollbacks, cause data desynchronization, and pollute the database.
+* **DO NOT** access `self._cr` or `self._context` directly. Use `self.env.cr` and `self.env.context` instead to satisfy Odoo 19 requirements.
+* **DO NOT** write `@api.onchange` decorators for backend business logic. Onchanges are UI-only and are completely bypassed during programmatic creations or writes. Use `@api.depends` instead.
+* **DO NOT** execute search operations inside loops. Always perform search outside and map/prefetch records.
+* **DO NOT** use `read_group` in backend code. Implement `_read_group` to remain compatible with Odoo 18/19.

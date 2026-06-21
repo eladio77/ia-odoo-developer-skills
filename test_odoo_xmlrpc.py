@@ -1,130 +1,101 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Safe XML-RPC connection test script for Odoo.
-Uses environment variables for credentials and performs
-an optimized search_read query with explicit fields.
+CTiEG Odoo XML-RPC Integration Test Client
+-------------------------------------------
+This script demonstrates safe, optimized external connection to an Odoo database.
+Following the querying-odoo-xmlrpc skill standards, it:
+1. Prevents hardcoded credentials by pulling from environment variables.
+2. Uses the native python library xmlrpc.client (no external pip dependencies).
+3. Selects fields explicitly to prevent heavy computed field overhead.
+4. Leverages search_read in a single transaction trip to prevent network lag.
 
 Author: CTiEG (hola@ctieg.com | www.ctieg.com)
+Copyright: (c) 2026 CTiEG
 License: MIT
 """
 
 import os
 import sys
-import logging
-from xmlrpc.client import ServerProxy, Fault
+import xmlrpc.client
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger("odoo_xmlrpc_test")
+def run_integration_test():
+    print("================================================================")
+    print("      CTIEG ODOO EXTERNAL API INTEGRATION TESTER                ")
+    print("================================================================")
 
+    # 1. Safely retrieve credentials from environment variables
+    url = os.getenv("ODOO_URL")
+    db = os.getenv("ODOO_DB")
+    username = os.getenv("ODOO_USER")
+    api_key = os.getenv("ODOO_API_KEY")
 
-def load_env_or_exit(var_name: str) -> str:
-    """Load an environment variable or exit with error."""
-    value = os.getenv(var_name)
-    if not value:
-        logger.error(
-            "Environment variable %s not set. "
-            "Export it before running the script:\n"
-            "  export %s=\"value\"",
-            var_name,
-            var_name,
-        )
-        sys.exit(1)
-    return value
-
-
-def test_odoo_connection() -> None:
-    """
-    Test the XML-RPC connection to Odoo using credentials
-    from environment variables and execute a search_read query
-    on the res.partner model.
-    """
-    odoo_url = load_env_or_exit("ODOO_URL")
-    odoo_db = load_env_or_exit("ODOO_DB")
-    odoo_user = load_env_or_exit("ODOO_USER")
-    odoo_api_key = load_env_or_exit("ODOO_API_KEY")
-
-    common_endpoint = f"{odoo_url}/xmlrpc/2/common"
-    object_endpoint = f"{odoo_url}/xmlrpc/2/object"
-
-    logger.info("Connecting to Odoo: %s", odoo_url)
-    logger.info("Database: %s", odoo_db)
-    logger.info("User: %s", odoo_user)
-
-    try:
-        common = ServerProxy(common_endpoint)
-        version = common.version()
-        logger.info(
-            "Odoo server detected: %s (v%s)",
-            version.get("server_version", "unknown"),
-            version.get("server_version", "?"),
-        )
-    except Fault as e:
-        logger.error("Error getting server version: %s", e)
+    if not all([url, db, username, api_key]):
+        print("[✗] Error: Missing one or more required environment variables.")
+        print("    Please set ODOO_URL, ODOO_DB, ODOO_USER, and ODOO_API_KEY in your system.")
+        print("\n    Example:")
+        print("    export ODOO_URL=\"https://mycompany.odoo.com\"")
+        print("    export ODOO_DB=\"mycompany_db\"")
+        print("    export ODOO_USER=\"integrator@mycompany.com\"")
+        print("    export ODOO_API_KEY=\"your_generated_user_api_key\"")
+        print("================================================================")
         sys.exit(1)
 
+    print(f"[*] Endpoint Target: {url}")
+    print(f"[*] Target Database : {db}")
+    print(f"[*] Connecting as   : {username}")
+
     try:
-        uid = common.authenticate(odoo_db, odoo_user, odoo_api_key, {})
+        # 2. Establish connection to the common endpoint (unauthenticated queries)
+        print("[*] Contacting server version common service...")
+        common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common")
+        version_info = common.version()
+        print(f"[✓] Connection successful! Odoo Server Version: {version_info.get('server_version')}")
+
+        # 3. Authenticate with Odoo to receive user ID (uid)
+        print("[*] Authenticating with Odoo using API Key...")
+        uid = common.authenticate(db, username, api_key, {})
         if not uid:
-            logger.error(
-                "Authentication failed. Verify your credentials "
-                "(user and API Key)."
-            )
+            print("[✗] Error: Authentication denied. Check your URL, DB, Username, and API Key.")
             sys.exit(1)
-        logger.info("Authentication successful. UID: %s", uid)
-    except Fault as e:
-        logger.error("Authentication error: %s", e)
+        print(f"[✓] Authenticated successfully. Received UID: {uid}")
+
+        # 4. Establish connection to the object endpoint for transactional methods
+        models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object")
+
+        # 5. Execute search_read on res.partner (Customers) with explicit fields and limits
+        print("[*] Performing optimized search_read on 'res.partner'...")
+        model_name = "res.partner"
+        domain = [("active", "=", True), ("is_company", "=", True)]
+        
+        # Explicit fields selection to protect server RAM and speed up query response
+        kwargs = {
+            "fields": ["id", "name", "email", "phone"],
+            "limit": 5,
+            "order": "name asc"
+        }
+
+        records = models.execute_kw(db, uid, api_key, model_name, "search_read", [domain], kwargs)
+        
+        print(f"[✓] Successfully retrieved {len(records)} active company records:\n")
+        for record in records:
+            print(f"    - ID: {record.get('id')} | Name: {record.get('name')}")
+            print(f"      Email: {record.get('email') or 'N/A'} | Phone: {record.get('phone') or 'N/A'}")
+            print("    " + "-"*50)
+
+        print("[✓] Odoo XML-RPC Integration Test successfully finished.")
+        print("================================================================")
+
+    except xmlrpc.client.Fault as fault:
+        print(f"[✗] Odoo Server Exception Occurred!")
+        print(f"    Fault Code  : {fault.faultCode}")
+        print(f"    Fault String: {fault.faultString}")
+        print("================================================================")
         sys.exit(1)
-
-    try:
-        models = ServerProxy(object_endpoint)
-        partners = models.execute_kw(
-            odoo_db,
-            uid,
-            odoo_api_key,
-            "res.partner",
-            "search_read",
-            [  # domain (filters)
-                ["is_company", "=", True]
-            ],
-            {
-                "fields": ["id", "name", "email", "phone"],
-                "limit": 5,
-            },
-        )
-
-        if not partners:
-            logger.warning(
-                "No records found in res.partner "
-                "with the applied filters."
-            )
-        else:
-            logger.info(
-                "Records retrieved (res.partner): %d", len(partners)
-            )
-            for partner in partners:
-                logger.info(
-                    "  ID=%-5s | Name=%-30s | Email=%-30s | Phone=%s",
-                    partner.get("id"),
-                    partner.get("name", "")[:30],
-                    partner.get("email", "")[:30] or "N/A",
-                    partner.get("phone", "") or "N/A",
-                )
-
-        logger.info("XML-RPC connection test completed successfully.")
-
-    except Fault as e:
-        logger.error("Error in XML-RPC call: %s", e)
+    except Exception as e:
+        print(f"[✗] Network or Connection Error: {str(e)}")
+        print("================================================================")
         sys.exit(1)
-    except ConnectionError as e:
-        logger.error("Connection error with server: %s", e)
-        sys.exit(1)
-
 
 if __name__ == "__main__":
-    logger.info("=== START: Odoo XML-RPC connection test ===")
-    test_odoo_connection()
-    logger.info("=== END: Odoo XML-RPC connection test ===")
+    run_integration_test()\n

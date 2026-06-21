@@ -1,57 +1,58 @@
-# Contribution Guide for Odoo Cline Skills
+# Contributing to Odoo Cline Skills
 
-Thank you for your interest in contributing to the Odoo Skills library for Cline! This project is led and maintained by **CTiEG** (hola@ctieg.com | [www.ctieg.com](https://www.ctieg.com)). We deeply value community contributions to make this the most robust artificial intelligence resource for Odoo developers.
+We welcome contributions from developers, architects, and Odoo specialists around the world! By contributing, you help make AI-assisted Odoo development safer, faster, and more robust for the entire open-source community.
 
-By contributing, you help the AI write cleaner, safer, more efficient Odoo code aligned with the core Odoo and **OCA (Odoo Community Association)** standards.
+This repository is maintained and governed by **CTiEG** (hola@ctieg.com | [www.ctieg.com](https://www.ctieg.com)).
 
----
+## Governance & Code of Conduct
 
-##  Golden Rules for Skills
+1. **Maintain OCA & Odoo 19 Standards**: All technical additions, templates, or instructions must align with official Odoo 19.0+ standards and Odoo Community Association (OCA) coding guidelines.
+2. **Adhere to the Day 3 Runbook**: Skills must be written under the **Progressive Disclosure** pattern. Keep `SKILL.md` slim (focusing on metadata, triggers, and the primary high-level workflow), and move raw guides, deprecation lists, or detailed schemas to the `references/` directory. Deterministic code, XML views, or scripts must be bundled inside the `assets/` or `scripts/` directories instead of bloating the prompt context.
+3. **Respect License and Copyright**: This project is licensed under the MIT License. Contributions are automatically licensed under the same terms. All copyright notices must preserve the ownership of **CTiEG**.
 
-Any new skill or modification to existing ones must comply with the following requirements:
+## How to Contribute
 
-1. **Grounding Guarantee**: Every instruction or code pattern must be rigorously backed by official Odoo documentation or widely recognized community best practices.
-2. **Modularity**: Design the guidelines so that the AI acts on demand. Do not saturate skill files with generic Python explanations. Focus on Odoo logic.
-3. **Multi-Version**: Make sure to clearly indicate whether a code pattern applies or changes between versions (e.g., specify what works in v16, what changed in v17, and what is mandatory for v18 and v19+).
-4. **Security and Performance First**: Every Skill must actively educate the agent to write code that avoids security flaws (e.g., SQL injections, unwanted privilege escalation with `sudo()`) and database bottlenecks (e.g., loops with single write operations, missing prefetching, or N+1 problems).
+### 1. Propose an Issue
+Before writing any code or markdown, open an Issue to discuss your idea. Describe the specific "use-case" or "runbook" you want the AI agent to master, why it's recurring, and what the expected triggers/anti-triggers are.
 
----
-
-##  Contribution Process
-
-1. **Fork the Repository**: Create a copy of this repository in your GitHub account.
-2. **Create a Branch**: Name your branch descriptively:
-   * For new skills: `feature/skill-name`
-   * For fixes or improvements: `fix/improvement-name`
-3. **Write and Validate**:
-   * Make sure Skills are saved in Markdown format (`.md`) inside `.cline/skills/`.
-   * If you add Python examples, ensure they are syntactically correct under Python 3.10+ and compatible with the Odoo ORM.
-4. **Submit a Pull Request (PR)**:
-   * Describe the motivation for the change in detail.
-   * Provide a use case or example of how Cline successfully uses the new skill.
-   * The technical team at **CTiEG** will review the proposal as soon as possible.
-
----
-
-##  Suggested Structure for New Skills
-
-Each Skill `.md` file should be structured using the following template:
-```markdown
-# Skill: [Short and Descriptive Competency Name]
-
-[Brief description of what technical ability this file grants to the Cline agent]
-
-## Architectural Guidelines
-*   **[Key Design Rule]**: [Design or security instruction]
-*   **[Performance Rule]**: [Optimization instruction]
-
-## Reference Code / Syntax
-... Clean, commented code examples ready to be imitated by the AI ...
-
-## Version Constraints
-*   **Odoo [Version]**: [Details of critical version-specific changes]
+### 2. Fork and Clone
+Fork this repository under your GitHub account, clone it locally, and set up your workspace:
+```bash
+git clone https://github.com/your-username/odoo-cline-skills.git
+cd odoo-cline-skills
 ```
 
----
+### 3. Create a Local Branch
+Use a clear, descriptive branch name:
+```bash
+git checkout -b add-skill-managing-backups
+```
 
-We look forward to your Pull Request! If you have any questions, you can write to us directly at [hola@ctieg.com](mailto:hola@ctieg.com).
+### 4. Implement the Skill Structure
+Ensure your new skill is created as a folder inside `.cline/skills/` following our strict structure:
+```text
+.cline/skills/your_new_skill_name/
+├── SKILL.md                  # Frontmatter + triggers + 7 mandatory sections
+├── references/               # Detailed documentation files
+└── assets/                   # Reusable code, manifests, or XML templates
+```
+*Note: The directory name must use `snake_case`, the skill name in YAML must use `kebab-case` and a gerund form (e.g., `managing-backups`).*
+
+### 5. Validate Your Skill
+Run our local validation suite before committing to make sure your frontmatter lints correctly and no passwords/secrets are leaked:
+```bash
+python3 validate_all.py
+```
+
+### 6. Open a Pull Request (PR)
+Push your changes to your fork and submit a PR against our `main` branch. Provide:
+* A clear description of the new capability.
+* At least 3 positive and 3 negative triggers tested during your local runs with Cline/VS Code.
+* Confirmation that your validation script passes cleanly.
+
+## Need Help?
+If you have any questions, feedback, or would like to coordinate commercial AI integrations, feel free to contact us:
+* **Email**: hola@ctieg.com
+* **Website**: [www.ctieg.com](https://www.ctieg.com)
+
+Thank you for helping us shape the future of agentic Odoo development!\n

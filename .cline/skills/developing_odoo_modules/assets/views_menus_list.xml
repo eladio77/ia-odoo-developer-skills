@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_sales_performance_root" 
+              name="Performance Analysis" 
+              parent="sale.menu_sale_config" 
+              sequence="50"/>
+
+    <menuitem id="menu_sales_performance_optimizer" 
+              name="Analysis Tasks" 
+              parent="menu_sales_performance_root" 
+              action="project_task_optimizer_action" 
+              sequence="10"/>
+</odoo>\n

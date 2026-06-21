@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="module_category_sales_performance" model="ir.module.category">
+            <field name="name">Sales Performance</field>
+            <field name="sequence">20</field>
+        </record>
+
+        <record id="group_sales_performance_user" model="res.groups">
+            <field name="name">Analyst User</field>
+            <field name="category_id" ref="module_category_sales_performance"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+        </record>
+
+        <record id="group_sales_performance_manager" model="res.groups">
+            <field name="name">Analyst Manager</field>
+            <field name="category_id" ref="module_category_sales_performance"/>
+            <field name="implied_ids" eval="[(4, ref('group_sales_performance_user'))]"/>
+            <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+        </record>
+    </data>
+</odoo>\n
